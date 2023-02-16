@@ -3,11 +3,14 @@ package com.example.sbp
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.os.Build
+import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -38,8 +41,8 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
         when (call.method) {
             "getInstalledBanks" -> {
                 val pm: PackageManager = context.applicationContext.packageManager
-                val installedApplications =
-                    pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                val installedApplications = getInstalledApplicationsCompat(pm)
+//                    pm.getInstalledApplications(PackageManager.GET_META_DATA)
 
                 val applicationPackageNames =
                     call.argument<List<String>>("application_package_names")!!
@@ -47,6 +50,7 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
                 val installedBanks = mutableListOf<Map<String, Any>>()
 
                 for (installedApplication in installedApplications) {
+                    Log.i("SBP", installedApplication.packageName)
                     for (applicationPackageName in applicationPackageNames) {
                         if (installedApplication.packageName == applicationPackageName) {
                             val icon = installedApplication.loadIcon(pm)
@@ -84,13 +88,53 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
             "openBank" -> {
                 val packageName = call.argument<String>("package_name")!!
                 val url = call.argument<String>("url")!!
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                intent.setPackage(packageName)
-                context.startActivity(intent)
+                openSbpActivity(context, packageName, Uri.parse(url))
+//                val intent = Intent(Intent.ACTION_VIEW)
+//                intent.setData(Uri.parse(url))
+//                intent.addCategory(Intent.CATEGORY_DEFAULT)
+////                intent.addCategory(Intent.CATEGORY_BROWSABLE)
+//                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+//                intent.setPackage(packageName)
+//                Log.i("SBP", intent.scheme.toString())
+//                Log.i("SBP", intent.type.toString())
+//                context.startActivity(intent)
             }
             else -> {
                 result.notImplemented()
+            }
+        }
+    }
+
+    /*
+* need android.permission.QUERY_ALL_PACKAGES
+* Allows query of any normal app on the device, regardless of manifest declarations.
+* Protection level: normal
+ */
+    @SuppressLint("QueryPermissionsNeeded")
+    fun getInstalledApplicationsCompat(packageManager: PackageManager): List<ApplicationInfo> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getInstalledApplications(
+                PackageManager.ApplicationInfoFlags.of(
+                    PackageManager.GET_META_DATA.toLong()
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            return packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+        }
+    }
+
+    fun openSbpActivity(context: Context, packageName: String, uri: Uri) {
+        val intent = Intent(Intent.ACTION_VIEW)
+        intent.setPackage(packageName)
+        intent.setDataAndNormalize(uri)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+        } catch (e: java.lang.Exception) {
+            context.packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+                intent.setDataAndNormalize(uri)
+                context.startActivity(intent)
             }
         }
     }
