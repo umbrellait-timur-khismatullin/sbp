@@ -92,7 +92,6 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
 //                val intent = Intent(Intent.ACTION_VIEW)
 //                intent.setData(Uri.parse(url))
 //                intent.addCategory(Intent.CATEGORY_DEFAULT)
-////                intent.addCategory(Intent.CATEGORY_BROWSABLE)
 //                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 //                intent.setPackage(packageName)
 //                Log.i("SBP", intent.scheme.toString())
@@ -124,7 +123,7 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
-    fun openSbpActivity(context: Context, packageName: String, uri: Uri) {
+    private fun openSbpActivity(context: Context, packageName: String, uri: Uri) {
         val intent = Intent(Intent.ACTION_VIEW)
         intent.setPackage(packageName)
         intent.setDataAndNormalize(uri)
@@ -134,6 +133,7 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
         } catch (e: java.lang.Exception) {
             context.packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
                 intent.setDataAndNormalize(uri)
+                intent.action=Intent.ACTION_VIEW
                 context.startActivity(intent)
             }
         }
