@@ -3,14 +3,13 @@ package com.example.sbp
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -18,6 +17,9 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.ByteArrayOutputStream
+import java.text.Collator
+import java.util.*
+import kotlin.Comparator
 
 
 /** SbpPlugin */
@@ -40,63 +42,18 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         when (call.method) {
             "getInstalledBanks" -> {
-                val pm: PackageManager = context.applicationContext.packageManager
-                val installedApplications = getInstalledApplicationsCompat(pm)
-//                    pm.getInstalledApplications(PackageManager.GET_META_DATA)
-
                 val applicationPackageNames =
-                    call.argument<List<String>>("application_package_names")!!
-
-                val installedBanks = mutableListOf<Map<String, Any>>()
-
-                for (installedApplication in installedApplications) {
-                    Log.i("SBP", installedApplication.packageName)
-                    for (applicationPackageName in applicationPackageNames) {
-                        if (installedApplication.packageName == applicationPackageName) {
-                            val icon = installedApplication.loadIcon(pm)
-                            val name = pm.getApplicationLabel(installedApplication)
-
-                            val bitmap: Bitmap = if (icon is BitmapDrawable) {
-                                icon.bitmap
-                            } else {
-                                val bitmap = Bitmap.createBitmap(
-                                    icon.intrinsicWidth,
-                                    icon.intrinsicHeight,
-                                    Bitmap.Config.ARGB_8888
-                                )
-                                val canvas = Canvas(bitmap)
-                                icon.setBounds(0, 0, canvas.width, canvas.height)
-                                icon.draw(canvas)
-                                bitmap
-                            }
-
-                            val stream = ByteArrayOutputStream()
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                            val byteArray = stream.toByteArray()
-                            installedBanks.add(
-                                mapOf(
-                                    "package_name" to installedApplication.packageName,
-                                    "name" to name.toString(),
-                                    "bitmap" to byteArray
-                                )
-                            )
-                        }
-                    }
-                }
-                result.success(installedBanks)
+                    call.argument<List<String>>("application_package_names") ?: emptyList<String>()
+                val supportedBanks = getSupportedBanks(applicationPackageNames, context)
+                result.success(supportedBanks)
             }
             "openBank" -> {
                 val packageName = call.argument<String>("package_name")!!
                 val url = call.argument<String>("url")!!
-                openSbpActivity(context, packageName, Uri.parse(url))
-//                val intent = Intent(Intent.ACTION_VIEW)
-//                intent.setData(Uri.parse(url))
-//                intent.addCategory(Intent.CATEGORY_DEFAULT)
-//                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-//                intent.setPackage(packageName)
-//                Log.i("SBP", intent.scheme.toString())
-//                Log.i("SBP", intent.type.toString())
-//                context.startActivity(intent)
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.setPackage(packageName)
+                context.startActivity(intent)
             }
             else -> {
                 result.notImplemented()
@@ -104,38 +61,72 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
-    /*
-* need android.permission.QUERY_ALL_PACKAGES
-* Allows query of any normal app on the device, regardless of manifest declarations.
-* Protection level: normal
- */
-    @SuppressLint("QueryPermissionsNeeded")
-    fun getInstalledApplicationsCompat(packageManager: PackageManager): List<ApplicationInfo> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.getInstalledApplications(
-                PackageManager.ApplicationInfoFlags.of(
-                    PackageManager.GET_META_DATA.toLong()
+    private fun getSupportedBanks(
+        banksFromAssetLinks: List<String>,
+        context: Context,
+        uri: String = "https://qr.nspk.ru/test"
+    ): List<Map<String, Any>> {
+        val intent = Intent(Intent.ACTION_VIEW)
+        intent.setDataAndNormalize(Uri.parse(uri))
+        val packageManager = context.packageManager
+        val russianComparator =
+            Comparator<Triple<String, String, ByteArray>> { o1, o2 ->
+                Collator.getInstance(Locale("ru", "RU")).compare(o1.first, o2.first)
+            }
+
+        return getActivityResolveInfoCompat(intent, packageManager)
+            .filter {
+                // filter activities, what containes in banksFromAssetLinks
+                banksFromAssetLinks.contains(it.activityInfo.packageName)
+            }.map { resolveInfo ->
+                val appName =
+                    packageManager.getApplicationLabel(resolveInfo.activityInfo.applicationInfo)
+                        .toString()
+                val packageName = resolveInfo.activityInfo.packageName
+
+                val icon = resolveInfo.loadIcon(packageManager)
+                val bitmap: Bitmap = if (icon is BitmapDrawable) {
+                    icon.bitmap
+                } else {
+                    val bitmap = Bitmap.createBitmap(
+                        icon.intrinsicWidth,
+                        icon.intrinsicHeight,
+                        Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = Canvas(bitmap)
+                    icon.setBounds(0, 0, canvas.width, canvas.height)
+                    icon.draw(canvas)
+                    bitmap
+                }
+                val stream = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                val byteArray: ByteArray = stream.toByteArray()
+                Triple(appName, packageName, byteArray)
+            }.sortedWith(russianComparator)
+            .map {
+                mapOf(
+                    "name" to it.first,
+                    "package_name" to it.second,
+                    "bitmap" to it.third
                 )
+            }
+    }
+
+    /**
+     * Retrieve all activities that can be performed for the given intent.
+     */
+    private fun getActivityResolveInfoCompat(
+        intent: Intent,
+        packageManager: PackageManager
+    ): List<ResolveInfo> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(
+                intent,
+                PackageManager.ResolveInfoFlags.of(PackageManager.GET_ACTIVITIES.toLong())
             )
         } else {
             @Suppress("DEPRECATION")
-            return packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-        }
-    }
-
-    private fun openSbpActivity(context: Context, packageName: String, uri: Uri) {
-        val intent = Intent(Intent.ACTION_VIEW)
-        intent.setPackage(packageName)
-        intent.setDataAndNormalize(uri)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (e: java.lang.Exception) {
-            context.packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
-                intent.setDataAndNormalize(uri)
-                intent.action=Intent.ACTION_VIEW
-                context.startActivity(intent)
-            }
+            packageManager.queryIntentActivities(intent, PackageManager.GET_ACTIVITIES)
         }
     }
 
