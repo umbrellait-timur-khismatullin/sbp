@@ -4,12 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
-import android.os.Build
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -47,6 +45,7 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
                 val supportedBanks = getSupportedBanks(applicationPackageNames, context)
                 result.success(supportedBanks)
             }
+
             "openBank" -> {
                 val packageName = call.argument<String>("package_name")!!
                 val url = call.argument<String>("url")!!
@@ -55,6 +54,7 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
                 intent.setPackage(packageName)
                 context.startActivity(intent)
             }
+
             else -> {
                 result.notImplemented()
             }
@@ -64,27 +64,26 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
     private fun getSupportedBanks(
         banksFromAssetLinks: List<String>,
         context: Context,
-        uri: String = "https://qr.nspk.ru/test"
     ): List<Map<String, Any>> {
-        val intent = Intent(Intent.ACTION_VIEW)
-        intent.setDataAndNormalize(Uri.parse(uri))
-        val packageManager = context.packageManager
         val russianComparator =
             Comparator<Triple<String, String, ByteArray>> { o1, o2 ->
                 Collator.getInstance(Locale("ru", "RU")).compare(o1.first, o2.first)
             }
+        val pm: PackageManager = context.applicationContext.packageManager
+        val installedApplications =
+            pm.getInstalledPackages(PackageManager.GET_META_DATA)
 
-        return getActivityResolveInfoCompat(intent, packageManager)
+
+        return installedApplications
             .filter {
                 // filter activities, what containes in banksFromAssetLinks
-                banksFromAssetLinks.contains(it.activityInfo.packageName)
+                banksFromAssetLinks.contains(it.packageName)
             }.map { resolveInfo ->
                 val appName =
-                    packageManager.getApplicationLabel(resolveInfo.activityInfo.applicationInfo)
+                    pm.getApplicationLabel(resolveInfo)
                         .toString()
-                val packageName = resolveInfo.activityInfo.packageName
-
-                val icon = resolveInfo.loadIcon(packageManager)
+                val packageName = resolveInfo.packageName
+                val icon = resolveInfo.loadIcon(pm)
                 val bitmap: Bitmap = if (icon is BitmapDrawable) {
                     icon.bitmap
                 } else {
@@ -112,23 +111,6 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
             }
     }
 
-    /**
-     * Retrieve all activities that can be performed for the given intent.
-     */
-    private fun getActivityResolveInfoCompat(
-        intent: Intent,
-        packageManager: PackageManager
-    ): List<ResolveInfo> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.queryIntentActivities(
-                intent,
-                PackageManager.ResolveInfoFlags.of(PackageManager.GET_ACTIVITIES.toLong())
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(intent, PackageManager.GET_ACTIVITIES)
-        }
-    }
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
