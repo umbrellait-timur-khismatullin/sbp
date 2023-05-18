@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 /// данные, которые приходят из натива Android
@@ -11,15 +12,21 @@ class ApplicationInfoModel {
   /// [packageName] - иконка приложения
   late final Uint8List? bitmap;
 
+  /// id банка
+  String? schema;
+
   /// Получение данных из словаря
   ApplicationInfoModel.fromJson(Map<dynamic, dynamic> json) {
-    name = json['name'] ?? '';
-    packageName = json['package_name'] ?? '';
-    bitmap = json['bitmap'];
+    final list = List<int>.from(json['bitmap'] ?? []);
+    name = json['appName'] ?? '';
+    packageName = json['packageName'] ?? '';
+    bitmap = Uint8List.fromList(list); //json['bitmap'] ?? '';
+    schema = json['schema'];
   }
 
   /// Получение package_name в виде словаря
-  Map<String, dynamic> toMapPackageName() => {
+  Map<String, dynamic> toMapPackageName() =>
+      {
         'package_name': packageName,
       };
 }
