@@ -13,7 +13,7 @@ class ApplicationInfoModel {
   late final Uint8List? bitmap;
 
   /// id банка
-  String? schema;
+  late String schema;
 
   /// Получение данных из словаря
   ApplicationInfoModel.fromJson(Map<dynamic, dynamic> json) {

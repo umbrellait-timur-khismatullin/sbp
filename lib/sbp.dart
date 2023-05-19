@@ -43,7 +43,7 @@ class Sbp {
 
   /// Получение списка банков, установленных на устройстве пользователя: IOS
   /// передаем модель json, который приходит с https://qr.nspk.ru/proxyapp/c2bmembers.json
-  static Future<List<C2bmemberModel>> getIOSInstalledByC2bmembersJsonBanks(
+  static Future<String> getIOSInstalledByC2bmembersJsonBanks(
       Map<String, dynamic> c2bmembersData) async {
     /// Парсим список установленных банков с ссылки https://qr.nspk.ru/proxyapp/c2bmembers.json
     final c2bmembersModel = C2bmembersModel.fromJson(c2bmembersData);
@@ -76,7 +76,8 @@ class Sbp {
         }
       }
     }
-    return c2bmembersInstalled;
+    final map = c2bmembersInstalled.map((e) => e.toJson()).toList();
+    return json.encode(map);
   }
 
   /// Получение списка банков, установленных на устройстве пользователя: IOS

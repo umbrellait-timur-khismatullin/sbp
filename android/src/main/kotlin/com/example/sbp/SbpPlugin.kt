@@ -22,60 +22,6 @@ import java.util.*
 import kotlin.Comparator
 import com.google.gson.Gson
 
-
-data class SbpBankAnswer(
-    val appName: String,
-    val packageName: String,
-    val schema: String,
-    val bitmap: ByteArray
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as SbpBankAnswer
-
-        if (appName != other.appName) return false
-        if (packageName != other.packageName) return false
-        if (schema != other.schema) return false
-        if (!bitmap.contentEquals(other.bitmap)) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = appName.hashCode()
-        result = 31 * result + packageName.hashCode()
-        result = 31 * result + schema.hashCode()
-        result = 31 * result + bitmap.hashCode()
-        return result
-    }
-}
-
-data class SbpBank(
-    val bankName: String,
-    val logoURL: String,
-    val schema: String,
-    val package_name: String
-) {
-
-    val intentForCheck: Intent
-        get() = Intent(Intent.ACTION_VIEW).also {
-            it.setDataAndNormalize(Uri.parse("$schema://qr.nspk.ru/test"))
-        }
-
-}
-
-fun parseJsonToSbpBanks(json: String): List<SbpBank> {
-    val gson = Gson()
-    val banks: List<SbpBank> = gson.fromJson(json, Array<SbpBank>::class.java).toList()
-    return banks
-}
-
-fun parseToJson(dataList: List<SbpBankAnswer>): String {
-    val gson = Gson()
-    return gson.toJson(dataList)
-}
 /** SbpPlugin */
 class SbpPlugin : FlutterPlugin, MethodCallHandler {
     /// The MethodChannel that will the communication between Flutter and native Android
@@ -117,10 +63,10 @@ class SbpPlugin : FlutterPlugin, MethodCallHandler {
     }
 
     private fun getSupportedBanks(
-        banksFromAssetLinks: List<SbpBank>,
+        _banksFromAssetLinks: List<SbpBank>,
         context: Context,
     ): List<SbpBankAnswer> {
-
+        val banksFromAssetLinks = _banksFromAssetLinks.filter { it.schema.isNotEmpty() }
         val packageManager = context.packageManager
         val russianComparator =
             Comparator<SbpBankAnswer> { o1, o2 ->

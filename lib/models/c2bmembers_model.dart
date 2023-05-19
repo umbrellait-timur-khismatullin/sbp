@@ -37,4 +37,13 @@ class C2bmemberModel {
     schema = json['schema'] ?? '';
     packageName = json['package_name'] ?? '';
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'bankName': bankName,
+      'logoURL': logoURL,
+      'schema': schema,
+      'package_name': packageName
+    };
+  }
 }
